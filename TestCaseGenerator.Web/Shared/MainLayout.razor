@@ -1,0 +1,52 @@
+@inherits LayoutComponentBase
+
+<MudThemeProvider Theme="@_theme" />
+<MudDialogProvider />
+<MudSnackbarProvider />
+
+<MudLayout>
+    <MudAppBar Elevation="1" Color="Color.Primary">
+        <MudIcon Icon="@Icons.Material.Filled.Science" Size="Size.Large" Class="mr-3" />
+        <MudText Typo="Typo.h5" Class="ml-3">Test Case Generator</MudText>
+        <MudSpacer />
+        <MudText Typo="Typo.body2" Class="mr-4">Intelligent .NET Testing Tool</MudText>
+        <MudIconButton Icon="@Icons.Material.Filled.Code" Color="Color.Inherit" />
+    </MudAppBar>
+    
+    <MudMainContent Class="mt-16 pa-4">
+        <MudContainer MaxWidth="MaxWidth.ExtraLarge">
+            @Body
+        </MudContainer>
+    </MudMainContent>
+</MudLayout>
+
+<BlazoredToasts Position="Blazored.Toast.Configuration.ToastPosition.BottomRight" 
+                Timeout="5" 
+                SuccessClass="success-toast"
+                ErrorClass="error-toast" />
+
+@code {
+    private MudTheme _theme = new MudTheme()
+    {
+        Palette = new PaletteLight()
+        {
+            Primary = "#1976d2",
+            Secondary = "#424242",
+            AppbarBackground = "#1976d2",
+            Success = "#4caf50",
+            Error = "#f44336",
+            Warning = "#ff9800",
+            Info = "#2196f3"
+        },
+        PaletteDark = new PaletteDark()
+        {
+            Primary = "#90caf9",
+            Secondary = "#424242",
+            AppbarBackground = "#1e1e1e",
+            Success = "#66bb6a",
+            Error = "#ef5350",
+            Warning = "#ffa726",
+            Info = "#42a5f5"
+        }
+    };
+}

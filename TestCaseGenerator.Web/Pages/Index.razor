@@ -1,0 +1,371 @@
+@page "/"
+@inject TestGenerator TestGenerator
+@inject CoverageAnalyzer CoverageAnalyzer
+@inject IToastService ToastService
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Test Case Generator</PageTitle>
+
+<MudGrid>
+    <MudItem xs="12">
+        <MudPaper Elevation="3" Class="pa-6 mb-4">
+            <MudText Typo="Typo.h4" GutterBottom="true">
+                <MudIcon Icon="@Icons.Material.Filled.AutoAwesome" Class="mr-2" />
+                Generate Test Cases
+            </MudText>
+            <MudText Typo="Typo.body1" Color="Color.Secondary">
+                Upload your C# source files and let AI generate comprehensive test cases with coverage analysis
+            </MudText>
+        </MudPaper>
+    </MudItem>
+
+    <!-- File Upload Section -->
+    <MudItem xs="12" md="6">
+        <MudPaper Elevation="2" Class="pa-4">
+            <MudText Typo="Typo.h6" GutterBottom="true">
+                <MudIcon Icon="@Icons.Material.Filled.UploadFile" Class="mr-2" />
+                Upload Source File
+            </MudText>
+            
+            <InputFile id="fileInput" OnChange="HandleFileSelected" accept=".cs" hidden />
+            
+            <MudButton HtmlTag="label"
+                       Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.CloudUpload"
+                       FullWidth="true"
+                       Size="Size.Large"
+                       for="fileInput"
+                       Class="mt-4">
+                Choose C# File
+            </MudButton>
+
+            @if (!string.IsNullOrEmpty(_fileName))
+            {
+                <MudChip Color="Color.Success" Icon="@Icons.Material.Filled.CheckCircle" Class="mt-3">
+                    @_fileName (@_fileSize KB)
+                </MudChip>
+            }
+
+            @if (!string.IsNullOrEmpty(_sourceCode))
+            {
+                <MudPaper Elevation="1" Class="pa-3 mt-4" Style="max-height: 300px; overflow-y: auto;">
+                    <MudText Typo="Typo.caption" Color="Color.Secondary">Source Code Preview:</MudText>
+                    <pre style="font-size: 12px; margin: 0;">@_sourceCode.Substring(0, Math.Min(500, _sourceCode.Length))@(_sourceCode.Length > 500 ? "..." : "")</pre>
+                </MudPaper>
+            }
+        </MudPaper>
+    </MudItem>
+
+    <!-- Configuration Section -->
+    <MudItem xs="12" md="6">
+        <MudPaper Elevation="2" Class="pa-4">
+            <MudText Typo="Typo.h6" GutterBottom="true">
+                <MudIcon Icon="@Icons.Material.Filled.Settings" Class="mr-2" />
+                Configuration
+            </MudText>
+
+            <MudSelect @bind-Value="_options.TestFramework" Label="Test Framework" Variant="Variant.Outlined" Class="mt-3">
+                <MudSelectItem Value="TestFramework.NUnit">NUnit</MudSelectItem>
+                <MudSelectItem Value="TestFramework.MSTest">MSTest</MudSelectItem>
+                <MudSelectItem Value="TestFramework.XUnit">xUnit</MudSelectItem>
+            </MudSelect>
+
+            <MudSelect @bind-Value="_options.MockingFramework" Label="Mocking Framework" Variant="Variant.Outlined" Class="mt-3">
+                <MudSelectItem Value="MockingFramework.Moq">Moq</MudSelectItem>
+                <MudSelectItem Value="MockingFramework.NSubstitute">NSubstitute</MudSelectItem>
+                <MudSelectItem Value="MockingFramework.None">None</MudSelectItem>
+            </MudSelect>
+
+            <MudSelect @bind-Value="_options.TestType" Label="Test Type" Variant="Variant.Outlined" Class="mt-3">
+                <MudSelectItem Value="TestType.Unit">Unit Tests</MudSelectItem>
+                <MudSelectItem Value="TestType.Integration">Integration Tests</MudSelectItem>
+                <MudSelectItem Value="TestType.Api">API Tests</MudSelectItem>
+                <MudSelectItem Value="TestType.UI">UI Tests</MudSelectItem>
+            </MudSelect>
+
+            <MudTextField @bind-Value="_options.Namespace" Label="Test Namespace" Variant="Variant.Outlined" Class="mt-3" />
+
+            <MudSwitch @bind-Checked="_options.GenerateTestData" Color="Color.Primary" Class="mt-3">
+                Generate Test Data
+            </MudSwitch>
+
+            <MudSwitch @bind-Checked="_options.IncludeCoverageAnalysis" Color="Color.Primary">
+                Include Coverage Analysis
+            </MudSwitch>
+
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Success"
+                       StartIcon="@Icons.Material.Filled.PlayArrow"
+                       FullWidth="true"
+                       Size="Size.Large"
+                       Class="mt-4"
+                       OnClick="GenerateTests"
+                       Disabled="@(string.IsNullOrEmpty(_sourceCode) || _isGenerating)">
+                @if (_isGenerating)
+                {
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+                    <span>Generating...</span>
+                }
+                else
+                {
+                    <span>Generate Tests</span>
+                }
+            </MudButton>
+        </MudPaper>
+    </MudItem>
+
+    <!-- Progress Section -->
+    @if (_isGenerating)
+    {
+        <MudItem xs="12">
+            <MudPaper Elevation="2" Class="pa-4">
+                <MudText Typo="Typo.h6" GutterBottom="true">
+                    <MudIcon Icon="@Icons.Material.Filled.Autorenew" Class="mr-2 rotating-icon" />
+                    Processing...
+                </MudText>
+                <MudProgressLinear Color="Color.Primary" Indeterminate="true" Class="my-3" />
+                <MudText Typo="Typo.body2" Color="Color.Secondary">@_progressMessage</MudText>
+            </MudPaper>
+        </MudItem>
+    }
+
+    <!-- Results Section -->
+    @if (_classAnalysis != null && !_isGenerating)
+    {
+        <MudItem xs="12">
+            <MudPaper Elevation="2" Class="pa-4">
+                <MudText Typo="Typo.h6" GutterBottom="true">
+                    <MudIcon Icon="@Icons.Material.Filled.Analytics" Class="mr-2" />
+                    Code Analysis Results
+                </MudText>
+
+                <MudGrid Class="mt-3">
+                    <MudItem xs="12" sm="6" md="3">
+                        <MudPaper Elevation="1" Class="pa-3 text-center">
+                            <MudText Typo="Typo.h4" Color="Color.Primary">@_classAnalysis.Methods.Count</MudText>
+                            <MudText Typo="Typo.body2">Methods</MudText>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="3">
+                        <MudPaper Elevation="1" Class="pa-3 text-center">
+                            <MudText Typo="Typo.h4" Color="Color.Success">@_classAnalysis.Methods.Sum(m => m.SuggestedTestCases.Count)</MudText>
+                            <MudText Typo="Typo.body2">Test Cases</MudText>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="3">
+                        <MudPaper Elevation="1" Class="pa-3 text-center">
+                            <MudText Typo="Typo.h4" Color="Color.Warning">@(_classAnalysis.Methods.Any() ? _classAnalysis.Methods.Average(m => m.CyclomaticComplexity).ToString("F1") : "0")</MudText>
+                            <MudText Typo="Typo.body2">Avg Complexity</MudText>
+                        </MudPaper>
+                    </MudItem>
+                    <MudItem xs="12" sm="6" md="3">
+                        <MudPaper Elevation="1" Class="pa-3 text-center">
+                            <MudText Typo="Typo.h4" Color="Color.Info">@(_coverageReport?.OverallCoverageScore.ToString("F1") ?? "0")%</MudText>
+                            <MudText Typo="Typo.body2">Coverage Score</MudText>
+                        </MudPaper>
+                    </MudItem>
+                </MudGrid>
+
+                <MudTable Items="_classAnalysis.Methods" Class="mt-4" Hover="true" Breakpoint="Breakpoint.Sm">
+                    <HeaderContent>
+                        <MudTh>Method</MudTh>
+                        <MudTh>Return Type</MudTh>
+                        <MudTh>Parameters</MudTh>
+                        <MudTh>Complexity</MudTh>
+                        <MudTh>Test Cases</MudTh>
+                    </HeaderContent>
+                    <RowTemplate>
+                        <MudTd DataLabel="Method">
+                            <MudChip Size="Size.Small" Color="@(context.IsAsync ? Color.Info : Color.Default)">
+                                @context.MethodName
+                            </MudChip>
+                        </MudTd>
+                        <MudTd DataLabel="Return Type">@context.ReturnType</MudTd>
+                        <MudTd DataLabel="Parameters">@context.Parameters.Count</MudTd>
+                        <MudTd DataLabel="Complexity">
+                            <MudChip Size="Size.Small" Color="@GetComplexityColor(context.CyclomaticComplexity)">
+                                @context.CyclomaticComplexity
+                            </MudChip>
+                        </MudTd>
+                        <MudTd DataLabel="Test Cases">@context.SuggestedTestCases.Count</MudTd>
+                    </RowTemplate>
+                </MudTable>
+            </MudPaper>
+        </MudItem>
+
+        <!-- Coverage Report -->
+        @if (_coverageReport != null)
+        {
+            <MudItem xs="12">
+                <MudPaper Elevation="2" Class="pa-4">
+                    <MudText Typo="Typo.h6" GutterBottom="true">
+                        <MudIcon Icon="@Icons.Material.Filled.Assessment" Class="mr-2" />
+                        Coverage Analysis
+                    </MudText>
+
+                    @if (_coverageReport.Recommendations.Any())
+                    {
+                        <MudAlert Severity="Severity.Info" Class="mt-3">
+                            <MudText Typo="Typo.subtitle2" GutterBottom="true">Recommendations:</MudText>
+                            @foreach (var recommendation in _coverageReport.Recommendations)
+                            {
+                                <MudText Typo="Typo.body2">• @recommendation</MudText>
+                            }
+                        </MudAlert>
+                    }
+                </MudPaper>
+            </MudItem>
+        }
+
+        <!-- Generated Test Code -->
+        <MudItem xs="12">
+            <MudPaper Elevation="2" Class="pa-4">
+                <MudText Typo="Typo.h6" GutterBottom="true">
+                    <MudIcon Icon="@Icons.Material.Filled.Code" Class="mr-2" />
+                    Generated Test Code
+                </MudText>
+
+                <MudButton Variant="Variant.Filled"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.Download"
+                           OnClick="DownloadTests"
+                           Class="mb-3">
+                    Download Test File
+                </MudButton>
+
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Secondary"
+                           StartIcon="@Icons.Material.Filled.ContentCopy"
+                           OnClick="CopyToClipboard"
+                           Class="mb-3 ml-2">
+                    Copy to Clipboard
+                </MudButton>
+
+                <MudPaper Elevation="1" Class="pa-3" Style="max-height: 600px; overflow-y: auto; background-color: #1e1e1e; color: #d4d4d4;">
+                    <pre style="margin: 0; font-family: 'Consolas', 'Courier New', monospace; font-size: 13px;">@_generatedCode</pre>
+                </MudPaper>
+            </MudPaper>
+        </MudItem>
+    }
+</MudGrid>
+
+@code {
+    private string _fileName = string.Empty;
+    private string _fileSize = string.Empty;
+    private string _sourceCode = string.Empty;
+    private string _generatedCode = string.Empty;
+    private bool _isGenerating = false;
+    private string _progressMessage = string.Empty;
+    private ClassAnalysis? _classAnalysis;
+    private CoverageReport? _coverageReport;
+
+    private GenerationOptions _options = new GenerationOptions
+    {
+        TestFramework = TestFramework.NUnit,
+        MockingFramework = MockingFramework.Moq,
+        TestType = TestType.Unit,
+        Namespace = "Tests",
+        GenerateTestData = true,
+        IncludeCoverageAnalysis = true
+    };
+
+    private async Task HandleFileSelected(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        _fileName = file.Name;
+        _fileSize = (file.Size / 1024).ToString("F2");
+
+        try
+        {
+            using var stream = file.OpenReadStream(maxAllowedSize: 5 * 1024 * 1024); // 5MB max
+            using var reader = new StreamReader(stream);
+            _sourceCode = await reader.ReadToEndAsync();
+            
+            ToastService.ShowSuccess($"File '{_fileName}' loaded successfully!");
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Error loading file: {ex.Message}");
+        }
+    }
+
+    private async Task GenerateTests()
+    {
+        _isGenerating = true;
+        _progressMessage = "Analyzing code structure...";
+        StateHasChanged();
+
+        try
+        {
+            await Task.Delay(500); // Simulate processing
+
+            // Analyze code
+            _progressMessage = "Extracting methods and dependencies...";
+            StateHasChanged();
+            await Task.Delay(300);
+
+            _classAnalysis = TestGenerator.AnalyzeCode(_sourceCode);
+
+            // Generate coverage report
+            if (_options.IncludeCoverageAnalysis)
+            {
+                _progressMessage = "Calculating coverage metrics...";
+                StateHasChanged();
+                await Task.Delay(300);
+
+                _coverageReport = CoverageAnalyzer.AnalyzeCoverage(_classAnalysis);
+            }
+
+            // Generate tests
+            _progressMessage = "Generating test cases...";
+            StateHasChanged();
+            await Task.Delay(500);
+
+            _generatedCode = TestGenerator.GenerateTests(_sourceCode, _options);
+
+            ToastService.ShowSuccess($"Successfully generated {_classAnalysis.Methods.Sum(m => m.SuggestedTestCases.Count)} test cases!");
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Error generating tests: {ex.Message}");
+        }
+        finally
+        {
+            _isGenerating = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task DownloadTests()
+    {
+        if (string.IsNullOrEmpty(_generatedCode) || _classAnalysis == null)
+            return;
+
+        var fileName = $"{_classAnalysis.ClassName}Tests.cs";
+        var bytes = System.Text.Encoding.UTF8.GetBytes(_generatedCode);
+        var base64 = Convert.ToBase64String(bytes);
+
+        await JSRuntime.InvokeVoidAsync("downloadFile", fileName, base64);
+        ToastService.ShowSuccess($"Downloaded {fileName}");
+    }
+
+    private async Task CopyToClipboard()
+    {
+        if (string.IsNullOrEmpty(_generatedCode))
+            return;
+
+        await JSRuntime.InvokeVoidAsync("navigator.clipboard.writeText", _generatedCode);
+        ToastService.ShowSuccess("Copied to clipboard!");
+    }
+
+    private Color GetComplexityColor(int complexity)
+    {
+        return complexity switch
+        {
+            <= 5 => Color.Success,
+            <= 10 => Color.Warning,
+            _ => Color.Error
+        };
+    }
+}
